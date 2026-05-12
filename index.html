@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>收支整合助手</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --income-color: #27ae60;
+            --expense-color: #e74c3c;
+            --bg-color: #f8f9fa;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif; 
+            background-color: var(--bg-color); 
+            margin: 0; 
+            padding: 10px; 
+        }
+        .container { max-width: 100%; margin: auto; background: white; padding: 15px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); box-sizing: border-box; }
+        
+        h1 { text-align: center; color: var(--primary-color); font-size: 20px; margin: 10px 0; }
+
+        /* 置頂儀表板 */
+        .summary-dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: white;
+            padding: 10px 0;
+        }
+        .card { padding: 15px 5px; border-radius: 10px; color: white; text-align: center; }
+        .bg-balance { background: #3498db; grid-column: span 2; }
+        .bg-income { background: var(--income-color); }
+        .bg-expense { background: var(--expense-color); }
+        .card span { font-size: 12px; opacity: 0.9; display: block; }
+        .card div { font-size: 20px; font-weight: bold; margin-top: 5px; }
+
+        .section-title { font-size: 17px; font-weight: bold; margin: 25px 0 10px; border-left: 6px solid var(--primary-color); padding-left: 10px; }
+
+        .input-box {
+            background: #fdfdfd;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+        }
+        .input-row { display: flex; gap: 8px; margin-bottom: 10px; }
+        .input-row input {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            flex: 1;
+        }
+        .btn-add-income { background: var(--income-color); color: white; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; }
+        .btn-add-expense { background: var(--expense-color); color: white; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; }
+
+        /* 清單樣式 */
+        .history-list { margin-top: 10px; max-height: 300px; overflow-y: auto; }
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 15px;
+        }
+        .item-info { display: flex; flex-direction: column; }
+        .item-date { font-size: 11px; color: #999; }
+        .amount-in { color: var(--income-color); font-weight: bold; }
+        .amount-out { color: var(--expense-color); font-weight: bold; }
+        .btn-del { color: #ccc; border: none; background: none; font-size: 18px; padding-left: 10px; }
+
+        .clear-all { text-align: center; margin: 40px 0 20px; color: #bbb; font-size: 13px; text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🗓️ 綜合收支帳本</h1>
+
+    <div class="summary-dashboard" id="dashboard">
+        <div class="card bg-balance">
+            <span>目前剩餘可動用金額</span>
+            <div id="display-remaining">0</div>
+        </div>
+        <div class="card bg-income">
+            <span>總收入項目</span>
+            <div id="display-total-income">0</div>
+        </div>
+        <div class="card bg-expense">
+            <span>總支出項目</span>
+            <div id="display-total-expense">0</div>
+        </div>
+    </div>
+
+    <div class="section-title" style="border-left-color: var(--income-color);">💰 收入紀錄 (薪水/給錢)</div>
+    <div class="input-box">
+        <div class="input-row">
+            <input type="text" id="inc-name" placeholder="來源 (如: 薪水, 宥嘉)">
+            <input type="number" id="inc-amount" inputmode="numeric" placeholder="金額" style="flex: 0.6;">
+            <button class="btn-add-income" onclick="addItem('IN')">存入</button>
+        </div>
+    </div>
+
+    <div class="section-title" style="border-left-color: var(--expense-color);">💸 支出紀錄 (每日花費)</div>
+    <div class="input-box">
+        <div class="input-row">
+            <input type="text" id="exp-name" placeholder="項目 (如: 晚餐)">
+            <input type="number" id="exp-amount" inputmode="numeric" placeholder="金額" style="flex: 0.6;">
+            <button class="btn-add-expense" onclick="addItem('OUT')">支出</button>
+        </div>
+    </div>
+
+    <div class="section-title">📋 收支明細清單</div>
+    <div class="history-list" id="history-list"></div>
+
+    <div class="clear-all" onclick="clearData()">清空所有紀錄重新開始</div>
+    <footer>資料僅儲存在此手機，換手機將無法看到舊資料。</footer>
+</div>
+
+<script>
+    let records = [];
+
+    window.onload = function() {
+        const saved = localStorage.getItem('wallet_v2_data');
+        if (saved) {
+            records = JSON.parse(saved);
+        }
+        updateUI();
+    };
+
+    function addItem(type) {
+        const nameNode = document.getElementById(type === 'IN' ? 'inc-name' : 'exp-name');
+        const amountNode = document.getElementById(type === 'IN' ? 'inc-amount' : 'exp-amount');
+        
+        const name = nameNode.value.trim() || (type === 'IN' ? "未分類收入" : "未分類支出");
+        const amount = parseFloat(amountNode.value) || 0;
+
+        if (amount <= 0) return;
+
+        const now = new Date();
+        const dateStr = `${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${now.getMinutes()}`;
+
+        const newRecord = {
+            id: Date.now(),
+            type: type, // 'IN' 或 'OUT'
+            name: name,
+            amount: amount,
+            date: dateStr
+        };
+
+        records.unshift(newRecord);
+        localStorage.setItem('wallet_v2_data', JSON.stringify(records));
+        
+        nameNode.value = "";
+        amountNode.nodeValue = ""; // 清空失敗修正
+        amountNode.value = "";
+        updateUI();
+    }
+
+    function deleteItem(id) {
+        records = records.filter(r => r.id !== id);
+        localStorage.setItem('wallet_v2_data', JSON.stringify(records));
+        updateUI();
+    }
+
+    function updateUI() {
+        const list = document.getElementById('history-list');
+        list.innerHTML = "";
+        
+        let totalIn = 0;
+        let totalOut = 0;
+        
+        records.forEach(r => {
+            if (r.type === 'IN') totalIn += r.amount;
+            else totalOut += r.amount;
+
+            const div = document.createElement('div');
+            div.className = 'history-item';
+            div.innerHTML = `
+                <div class="item-info">
+                    <strong>${r.name}</strong>
+                    <span class="item-date">${r.date}</span>
+                </div>
+                <div style="display:flex; align-items:center;">
+                    <span class="${r.type === 'IN' ? 'amount-in' : 'amount-out'}">
+                        ${r.type === 'IN' ? '+' : '-'}${r.amount.toLocaleString()}
+                    </span>
+                    <button class="btn-del" onclick="deleteItem(${r.id})">×</button>
+                </div>
+            `;
+            list.appendChild(div);
+        });
+
+        const balance = totalIn - totalOut;
+        document.getElementById('display-total-income').innerText = totalIn.toLocaleString();
+        document.getElementById('display-total-expense').innerText = totalOut.toLocaleString();
+        document.getElementById('display-remaining').innerText = balance.toLocaleString();
+
+        const balanceCard = document.getElementById('display-remaining').parentElement;
+        balanceCard.style.background = balance < 0 ? "#e67e22" : "#3498db";
+    }
+
+    function clearData() {
+        if (confirm("確定要重設帳本嗎？（這將刪除所有收入與支出歷史）")) {
+            localStorage.removeItem('wallet_v2_data');
+            records = [];
+            updateUI();
+        }
+    }
+</script>
+
+</body>
+</html>
